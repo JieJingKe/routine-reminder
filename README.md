@@ -94,9 +94,24 @@
 
 ### 方式一：直接运行预编译版
 
-到本仓库的 [Releases](https://github.com/JieJingKe/routine-reminder/releases) 下载 Windows 压缩包，解压后双击 `routine_reminder.exe`。
+到 [Releases](https://github.com/JieJingKe/routine-reminder/releases) 下载，**两种格式任选其一**：
 
-> **请整目录解压**：exe 同目录的插件 `.dll`、`flutter_windows.dll` 和 `data/` 文件夹都是运行必需的，单独拷一个 exe 起不来。
+| 文件 | 怎么用 | 适合 |
+| --- | --- | --- |
+| `routine_reminder-v0.9.2-windows-single.exe` | 下载后双击，就一个文件 | 发给别人、不想解压 |
+| `routine_reminder-v0.9.2-windows.zip` | 解压后双击 `routine_reminder.exe` | 想看清文件清单、放在固定位置 |
+
+**单文件版**第一次双击会把运行包释放到
+`%LOCALAPPDATA%\Programs\routine-reminder\`，之后始终从该目录启动主程序。
+这样开机自启写的是稳定路径，清理临时文件不会把它弄坏；不写注册表安装信息、
+不需要管理员权限，不想要时关掉开机自启并删掉该目录即可。首次启动多 1~2 秒解包时间。
+
+**整目录版**请整目录解压：exe 同目录的插件 `.dll`、`flutter_windows.dll`
+和 `data/` 都是运行必需的，单独拷一个 exe 起不来。
+
+> 两种格式都已内置 `msvcp140.dll` / `vcruntime140.dll` / `vcruntime140_1.dll`，
+> **无需另装 Visual C++ 运行库**（Windows 10/11 64 位）。程序未做数字签名，
+> 首次运行若被 SmartScreen 拦下，选「更多信息 → 仍要运行」。
 > 关闭主窗口不会退出程序，需要从托盘图标的菜单里选「退出」。
 
 ### 方式二：从源码构建
@@ -117,6 +132,22 @@ flutter build windows --release --no-tree-shake-icons
 
 > `--no-tree-shake-icons` 是必须的：增量构建会复用被裁剪过的图标字体，
 > 设置齿轮等图标会显示为空白。完整 `MaterialIcons-Regular.otf` 约 1.6 MB。
+
+### 分发包怎么生成
+
+`tool/single_exe/build.py` 一次产出上面的 zip 和单 exe：先按 Flutter 官方
+application-local 做法补齐 3 个 VC++ 运行库 DLL，再把整包压成 `bundle.zip`
+内嵌进 `launcher.py`（PyInstaller onefile）。中间文件全放在 `%TEMP%` 的
+纯 ASCII 路径下，避开中文路径踩构建工具的坑。
+
+```bash
+pip install -i https://pypi.org/simple pyinstaller
+python tool/single_exe/build.py --release build\windows\x64\runner\Release --repo . --out dist
+```
+
+若 PyInstaller 是用 `pip install --target <目录>` 装的，再补一个
+`--pyinstaller-home <目录>`。`launcher.py` 的 `--extract-only` 只释放不启动，
+用于无人值守校验落盘文件。
 
 若机器上开着系统代理，`flutter_tester` 连本地 WebSocket 会被劫持，
 跑测试前先清掉：
