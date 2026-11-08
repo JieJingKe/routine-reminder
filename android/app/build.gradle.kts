@@ -10,6 +10,8 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // 提醒用的是 AlarmManager + Notification.Builder，纯 Android 框架 API，
+        // 不需要 core library desugaring（也就不必引入 desugar_jdk_libs）。
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }

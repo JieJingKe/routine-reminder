@@ -45,7 +45,27 @@ void main() {
     // 底部三个 tab 都能切过去，且不抛布局溢出异常。
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('点开一段可改分类'), findsOneWidget);
+    expect(find.textContaining('点开一段可改名称'), findsOneWidget);
+
+    // v0.11：展开一段就能改名称与起止时刻（以前只能改分类 / 挪 15 分钟）。
+    await tester.tap(find.byIcon(Icons.expand_more).first);
+    await tester.pumpAndSettle();
+    expect(find.text('名称'), findsOneWidget);
+    expect(find.text('起止时刻'), findsOneWidget);
+    expect(find.text('开始'), findsOneWidget);
+    expect(find.text('结束'), findsOneWidget);
+
+    // 改名要即时反映到行标题上（写入走 withPlanBlocks，不是本地状态）。
+    await tester.enterText(find.byType(TextField).first, '测试名称');
+    await tester.pumpAndSettle();
+    expect(find.text('测试名称'), findsWidgets);
+
+    // 起止时刻的步进按钮点下去要生效，且不许把段改成负数时长。
+    final beforeStart = find.text('开始');
+    expect(beforeStart, findsOneWidget);
+    await tester.tap(find.byIcon(Icons.add).first);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
 
     await tester.tap(find.text('汇总'));
     await tester.pumpAndSettle();
@@ -67,6 +87,14 @@ void main() {
     expect(find.textContaining('(blocks:', findRichText: true), findsNothing);
     expect(find.textContaining('今天：', findRichText: true), findsOneWidget);
 
+    // v0.11：表名可以就地改（以前只有电脑端能改）。改完不用重开浮层。
+    await tester.tap(find.byIcon(Icons.edit_outlined).first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '我的第一张表');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(find.text('我的第一张表'), findsWidgets);
+
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
 
@@ -76,5 +104,17 @@ void main() {
     expect(find.text('导出备份'), findsOneWidget);
     expect(find.text('导入备份'), findsOneWidget);
     expect(find.textContaining('PlanStore'), findsOneWidget);
+
+    // 到点提醒：默认关，打开后要求权限并显示状态。
+    expect(find.text('到点提醒'), findsOneWidget);
+    expect(find.text('每段开始时弹一条通知'), findsOneWidget);
+    expect(find.text('关掉后不会推送任何通知'), findsOneWidget);
+
+    // 测试环境的提醒通道是 Noop（一律 granted），所以这里验的是
+    // 「开关 → 权限状态 → 排程说明」这条链路，不是系统通知本身。
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(find.text('按接下来 7 天的计划排程'), findsOneWidget);
+    expect(find.text('通知与精确闹钟都已放行'), findsOneWidget);
   });
 }

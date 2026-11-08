@@ -12,6 +12,7 @@ import 'data/plan_store.dart';
 import 'design/tokens.dart';
 import 'float/float_main.dart';
 import 'mobile/mobile_app.dart';
+import 'platform/reminders.dart';
 
 /// 入口。
 ///
@@ -24,6 +25,14 @@ Future<void> main(List<String> args) async {
   // Android 没有窗口管理、托盘、第二进程悬浮窗与注册表自启，
   // 直接走移动端那棵独立的树；下面的桌面初始化一行都不执行。
   if (Platform.isAndroid) {
+    // 只有 Android 才把提醒通道换成真实现；桌面端保持 NoopReminders，
+    // Windows 构建与测试都不会碰平台通道。
+    Reminders.instance = LocalNotificationReminders();
+    try {
+      await Reminders.instance.init();
+    } on Object {
+      // 初始化失败不该挡住启动，界面里的开关会给出权限提示。
+    }
     await _runMobile();
     return;
   }

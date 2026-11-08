@@ -8,7 +8,7 @@ publish_to: 'none'
 # → v0.9.1 浮层打磨（按钮 hover 统一变灰 / 浮层压暗遮罩）
 # → v0.9.2 停留 hover（快速经过不触发 / 命中区域严格等于按钮边界）。
 # 未验收前一律 v0.x；+N 是构建号，同一次交付重生构建时递增。
-version: 0.10.1+2
+version: 0.11.0+3
 
 environment:
   sdk: ^3.13.7
@@ -41,7 +41,6 @@ dependencies:
   # 穿透只加 WS_EX_TRANSPARENT。window_manager 会把 WS_EX_LAYERED 一起加上，
   # 而分层窗口的首帧不一定合成得出来 —— 悬浮窗会"隐身"到鼠标扫过为止。
   win32: ^5.15.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

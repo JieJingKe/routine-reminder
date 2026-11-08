@@ -90,6 +90,7 @@ class UiPrefs {
     this.floatWindow = const FloatWindowPrefs(),
     this.openAtLogin = false,
     this.theme,
+    this.remindersEnabled = false,
   });
 
   final FloatWindowPrefs floatWindow;
@@ -100,14 +101,20 @@ class UiPrefs {
   /// 系统还没来得及报亮度就会先闪一下错的颜色。
   final String? theme;
 
+  /// 到点提醒开关（Android）。默认关 —— 装完就自己弹通知会吓到人，
+  /// 第一次开的时候顺带申请通知权限与精确闹钟权限。
+  final bool remindersEnabled;
+
   UiPrefs copyWith({
     FloatWindowPrefs? floatWindow,
     bool? openAtLogin,
     String? theme,
+    bool? remindersEnabled,
   }) => UiPrefs(
     floatWindow: floatWindow ?? this.floatWindow,
     openAtLogin: openAtLogin ?? this.openAtLogin,
     theme: theme ?? this.theme,
+    remindersEnabled: remindersEnabled ?? this.remindersEnabled,
   );
 
   factory UiPrefs.fromJson(Map<String, dynamic>? json) => UiPrefs(
@@ -118,12 +125,14 @@ class UiPrefs {
     theme: (json?['theme'] == 'light' || json?['theme'] == 'dark')
         ? json!['theme'] as String
         : null,
+    remindersEnabled: json?['remindersEnabled'] as bool? ?? false,
   );
 
   Map<String, dynamic> toJson() => {
     'floatWindow': floatWindow.toJson(),
     'openAtLogin': openAtLogin,
     if (theme != null) 'theme': theme,
+    'remindersEnabled': remindersEnabled,
   };
 }
 

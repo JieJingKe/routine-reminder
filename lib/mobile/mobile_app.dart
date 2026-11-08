@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 
 import '../data/app_data.dart';
 import '../data/plan_store.dart';
+import '../data/reminder_schedule.dart';
 import '../data/transfer.dart';
 import '../design/tokens.dart';
 import '../domain/time_math.dart';
 import '../platform/file_transfer.dart';
+import '../platform/reminders.dart';
 import 'mobile_dashboard.dart';
 import 'mobile_editor.dart';
 import 'mobile_layers.dart';
@@ -38,13 +40,18 @@ class MobileApp extends StatefulWidget {
   State<MobileApp> createState() => _MobileAppState();
 }
 
-class _MobileAppState extends State<MobileApp> {
+class _MobileAppState extends State<MobileApp> with WidgetsBindingObserver {
   AppData? _data;
   Object? _error;
   late DateTime _now;
   Timer? _ticker;
   Timer? _saveDebounce;
   Timer? _toastTimer;
+
+  /// 排程 / 重排提醒是「清空 + 逐条登记」，比存盘贵得多。打字时每次
+  /// commit 都排一遍会卡输入，所以单独一道更长的防抖。
+  Timer? _reminderDebounce;
+  ReminderAccess _access = ReminderAccess.granted;
 
   MobileTab _tab = MobileTab.dashboard;
   MobileLayer _layer = MobileLayer.none;
@@ -58,6 +65,7 @@ class _MobileAppState extends State<MobileApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _now = DateTime.now();
     _data = widget.initialData;
     _error = widget.loadError;
@@ -66,7 +74,12 @@ class _MobileAppState extends State<MobileApp> {
       final next = DateTime.now();
       final crossedDay = TimeMath.dateKey(next) != TimeMath.dateKey(_now);
       setState(() => _now = next);
-      if (crossedDay) _ensureTodaySnapshot();
+      if (crossedDay) {
+        _ensureTodaySnapshot();
+        // 跨零点后「接下来 7 天」整体前移一天，提醒必须重排，
+        // 否则第八天起就没有通知了。
+        _syncReminders();
+      }
     });
     unawaited(
       widget.store.dataFilePath().then((p) {
@@ -77,18 +90,31 @@ class _MobileAppState extends State<MobileApp> {
       // 调用方没在入口预读数据时（例如 widget 测试），自己拉一次。
       unawaited(_bootstrap());
     } else {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _ensureTodaySnapshot(),
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _ensureTodaySnapshot();
+        unawaited(_refreshAccess());
+        _syncReminders(immediate: true);
+      });
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
     _saveDebounce?.cancel();
     _toastTimer?.cancel();
+    _reminderDebounce?.cancel();
     super.dispose();
+  }
+
+  /// 回到前台时系统权限可能已被改过（用户刚去设置里放行/关掉），
+  /// 同时补一次排程 —— 手机上的 App 常年不重启，只靠启动那一次不够。
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(_refreshAccess());
+    _syncReminders();
   }
 
   // ---------------------------------------------------------------- 数据
@@ -102,6 +128,8 @@ class _MobileAppState extends State<MobileApp> {
         _error = null;
       });
       _ensureTodaySnapshot();
+      unawaited(_refreshAccess());
+      _syncReminders(immediate: true);
     } on Object catch (e) {
       if (mounted) setState(() => _error = e);
     }
@@ -116,12 +144,14 @@ class _MobileAppState extends State<MobileApp> {
     _saveDebounce?.cancel();
     if (saveNow) {
       unawaited(_flush(next));
+      _syncReminders();
       return;
     }
     _saveDebounce = Timer(
       const Duration(milliseconds: 280),
       () => unawaited(_flush(next)),
     );
+    _syncReminders();
   }
 
   Future<void> _flush(AppData data) async {
@@ -169,6 +199,101 @@ class _MobileAppState extends State<MobileApp> {
       _commit(data.withUi(data.ui.copyWith(theme: next.key)), saveNow: true);
     } else {
       setState(() {});
+    }
+  }
+
+  /// 改计划表名字。只动 `name`，重复规则与作息一律不碰。
+  void _renamePlan(String planId, String name) {
+    final data = _data;
+    if (data == null) return;
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    if (data.planById(planId)?.name == trimmed) return;
+    _commit(
+      data.withPlans([
+        for (final p in data.plans)
+          p.id == planId ? p.copyWith(name: trimmed) : p,
+      ]),
+      saveNow: true,
+    );
+  }
+
+  // ---------------------------------------------------------------- 到点提醒
+
+  Future<void> _refreshAccess() async {
+    try {
+      final access = await Reminders.instance.check();
+      if (mounted) setState(() => _access = access);
+    } on Object {
+      // 通道不可用（例如测试 / 桌面）不影响主流程，保持默认值即可。
+    }
+  }
+
+  void _syncReminders({bool immediate = false}) {
+    _reminderDebounce?.cancel();
+    if (immediate) {
+      unawaited(_applyReminders());
+      return;
+    }
+    _reminderDebounce = Timer(
+      const Duration(milliseconds: 900),
+      () => unawaited(_applyReminders()),
+    );
+  }
+
+  Future<void> _applyReminders() async {
+    final data = _data;
+    if (data == null) return;
+    try {
+      if (data.ui.remindersEnabled) {
+        await Reminders.instance.sync(buildReminderSlots(data, DateTime.now()));
+      } else {
+        await Reminders.instance.cancelAll();
+      }
+    } on Object {
+      // 没有权限 / 系统拒绝排程时静默失败：界面上的开关状态与权限提示
+      // 已经把话说清楚了，这里再弹一次只会重复。
+    }
+  }
+
+  Future<void> _setReminders(bool on) async {
+    final data = _data;
+    if (data == null) return;
+    var access = _access;
+    if (on) {
+      try {
+        access = await Reminders.instance.request();
+      } on Object {
+        access = _access;
+      }
+    }
+    if (!mounted) return;
+    setState(() => _access = access);
+    _commit(
+      data.withUi(data.ui.copyWith(remindersEnabled: on)),
+      saveNow: true,
+    );
+    await _applyReminders();
+    if (!on) {
+      _showToast('已关闭到点提醒');
+    } else if (!access.notifications) {
+      _showToast('系统还没允许通知，去设置里放行后才会响');
+    } else if (!access.exact) {
+      _showToast('已开始提醒；精确闹钟未放行，可能晚几分钟');
+    } else {
+      _showToast('已按接下来 7 天排好提醒');
+    }
+  }
+
+  Future<void> _requestReminderAccess() async {
+    try {
+      final access = await Reminders.instance.request();
+      if (!mounted) return;
+      setState(() => _access = access);
+      _showToast(access.ready ? '通知与精确闹钟已放行' : '还有权限没放行，请到系统设置里手动允许');
+      await _applyReminders();
+    } on Object {
+      _showToast('打不开系统授权页，请到「设置 → 应用 → 我的时间」手动允许');
     }
   }
 
@@ -229,6 +354,7 @@ class _MobileAppState extends State<MobileApp> {
         _layer = MobileLayer.none;
       });
       _ensureTodaySnapshot();
+      _syncReminders(immediate: true);
       _showToast('已导入 ${pending.origin} 的计划表');
     } on Object catch (e) {
       _showToast('导入失败：$e');
@@ -304,6 +430,7 @@ class _MobileAppState extends State<MobileApp> {
                     now: _now,
                     onClose: _closeLayer,
                     onAssign: _assignDay,
+                    onRenamePlan: _renamePlan,
                     onEditPlan: (id) => setState(() {
                       _editPlanId = id;
                       _tab = MobileTab.edit;
@@ -315,10 +442,14 @@ class _MobileAppState extends State<MobileApp> {
                     dataPath: _dataPathText,
                     theme: Palette.theme,
                     busy: _busy,
+                    remindersEnabled: _data?.ui.remindersEnabled ?? false,
+                    access: _access,
                     onClose: _closeLayer,
                     onTheme: _setTheme,
                     onExport: _exportBackup,
                     onImport: _importBackup,
+                    onReminders: (on) => unawaited(_setReminders(on)),
+                    onRequestAccess: () => unawaited(_requestReminderAccess()),
                   ),
                 if (_layer == MobileLayer.confirmImport &&
                     _pendingImport != null)

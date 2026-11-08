@@ -5,6 +5,7 @@ import '../design/tokens.dart';
 import '../domain/calendar_rules.dart';
 import '../domain/plan.dart';
 import '../domain/time_math.dart';
+import '../platform/reminders.dart';
 
 /// 移动端浮层种类。与桌面版一样，全部内嵌在主窗口 Stack 里，
 /// 不走 showDialog / Navigator —— Palette 是静态门面，Overlay route
@@ -78,8 +79,8 @@ class MobileScrim extends StatelessWidget {
   }
 }
 
-/// 计划表选择 + 单日指派。
-class MobilePlanSheet extends StatelessWidget {
+/// 计划表选择 + 单日指派 + 改表名。
+class MobilePlanSheet extends StatefulWidget {
   const MobilePlanSheet({
     super.key,
     required this.data,
@@ -87,6 +88,7 @@ class MobilePlanSheet extends StatelessWidget {
     required this.onClose,
     required this.onAssign,
     required this.onEditPlan,
+    required this.onRenamePlan,
   });
 
   final AppData data;
@@ -94,14 +96,60 @@ class MobilePlanSheet extends StatelessWidget {
   final VoidCallback onClose;
   final void Function(String dateKey, String? planId) onAssign;
   final ValueChanged<String> onEditPlan;
+  final void Function(String planId, String name) onRenamePlan;
+
+  @override
+  State<MobilePlanSheet> createState() => _MobilePlanSheetState();
+}
+
+class _MobilePlanSheetState extends State<MobilePlanSheet> {
+  /// 正在改名的表 id。改名是**就地编辑**，不弹第二个浮层：手机上叠两层
+  /// 浮层很容易把「取消」按成「保存」，而且遮罩会盖住要对照的内容。
+  String? _renamingId;
+  TextEditingController? _nameCtrl;
+  FocusNode? _nameFocus;
+
+  @override
+  void dispose() {
+    _nameCtrl?.dispose();
+    _nameFocus?.dispose();
+    super.dispose();
+  }
+
+  void _startRename(Plan plan) {
+    _nameCtrl?.dispose();
+    _nameFocus?.dispose();
+    setState(() {
+      _renamingId = plan.id;
+      _nameCtrl = TextEditingController(text: plan.name)
+        ..selection = TextSelection.collapsed(offset: plan.name.length);
+      _nameFocus = FocusNode();
+    });
+  }
+
+  void _finishRename(Plan plan) {
+    final ctrl = _nameCtrl;
+    final name = ctrl?.text.trim() ?? '';
+    if (name.isNotEmpty && name != plan.name) {
+      widget.onRenamePlan(plan.id, name);
+    }
+    setState(() {
+      _renamingId = null;
+      _nameCtrl?.dispose();
+      _nameCtrl = null;
+      _nameFocus?.dispose();
+      _nameFocus = null;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final todayKey = TimeMath.dateKey(now);
-    final active = data.forDate(now);
+    final data = widget.data;
+    final todayKey = TimeMath.dateKey(widget.now);
+    final active = data.forDate(widget.now);
     return MobileScrim(
       title: '计划表',
-      onClose: onClose,
+      onClose: widget.onClose,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -127,13 +175,18 @@ class MobilePlanSheet extends StatelessWidget {
               plan: plan,
               active: plan.id == active.planId,
               overridden: data.dayOverrides.containsKey(todayKey),
-              onUseToday: () => onAssign(todayKey, plan.id),
-              onEdit: () => onEditPlan(plan.id),
+              renaming: _renamingId == plan.id,
+              nameController: _renamingId == plan.id ? _nameCtrl : null,
+              nameFocus: _renamingId == plan.id ? _nameFocus : null,
+              onStartRename: () => _startRename(plan),
+              onFinishRename: () => _finishRename(plan),
+              onUseToday: () => widget.onAssign(todayKey, plan.id),
+              onEdit: () => widget.onEditPlan(plan.id),
             ),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
-              onPressed: () => onAssign(todayKey, null),
+              onPressed: () => widget.onAssign(todayKey, null),
               icon: const Icon(Icons.undo, size: 16),
               label: const Text('今天恢复按规则自动'),
             ),
@@ -143,9 +196,9 @@ class MobilePlanSheet extends StatelessWidget {
           const SizedBox(height: 8),
           for (var i = 0; i < 7; i++)
             _DayAssignRow(
-              date: DateTime(now.year, now.month, now.day + i),
+              date: DateTime(widget.now.year, widget.now.month, widget.now.day + i),
               data: data,
-              onAssign: onAssign,
+              onAssign: widget.onAssign,
             ),
         ],
       ),
@@ -158,6 +211,11 @@ class _PlanRow extends StatelessWidget {
     required this.plan,
     required this.active,
     required this.overridden,
+    required this.renaming,
+    required this.nameController,
+    required this.nameFocus,
+    required this.onStartRename,
+    required this.onFinishRename,
     required this.onUseToday,
     required this.onEdit,
   });
@@ -165,6 +223,11 @@ class _PlanRow extends StatelessWidget {
   final Plan plan;
   final bool active;
   final bool overridden;
+  final bool renaming;
+  final TextEditingController? nameController;
+  final FocusNode? nameFocus;
+  final VoidCallback onStartRename;
+  final VoidCallback onFinishRename;
   final VoidCallback onUseToday;
   final VoidCallback onEdit;
 
@@ -181,16 +244,62 @@ class _PlanRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(child: Text(plan.name, style: TypeScale.title)),
-              if (active)
-                Text(
-                  overridden ? '今天·手动' : '今天·生效',
-                  style: TypeScale.labelSmall,
+          if (renaming)
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: nameController,
+                    focusNode: nameFocus,
+                    autofocus: true,
+                    style: TypeScale.body.copyWith(color: Palette.text),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => onFinishRename(),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      filled: true,
+                      fillColor: Palette.sunken,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 9,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(Radii.chip),
+                        borderSide: BorderSide(color: Palette.accent),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(Radii.chip),
+                        borderSide: BorderSide(color: Palette.accent),
+                      ),
+                    ),
+                  ),
                 ),
-            ],
-          ),
+                TextButton(
+                  onPressed: onFinishRename,
+                  child: const Text('保存'),
+                ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                Expanded(child: Text(plan.name, style: TypeScale.title)),
+                if (active)
+                  Text(
+                    overridden ? '今天·手动' : '今天·生效',
+                    style: TypeScale.labelSmall,
+                  ),
+                IconButton(
+                  onPressed: onStartRename,
+                  icon: const Icon(Icons.edit_outlined, size: 17),
+                  color: Palette.muted,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                  tooltip: '改表名',
+                ),
+              ],
+            ),
           const SizedBox(height: 4),
           Text(plan.repeat.summary, style: TypeScale.bodyMuted),
           const SizedBox(height: 8),
@@ -266,26 +375,34 @@ class _DayAssignRow extends StatelessWidget {
   }
 }
 
-/// 数据页：导入导出、主题、云同步路线说明。
+/// 数据页：导入导出、主题、到点提醒、云同步路线说明。
 class MobileDataSheet extends StatelessWidget {
   const MobileDataSheet({
     super.key,
     required this.dataPath,
     required this.theme,
     required this.busy,
+    required this.remindersEnabled,
+    required this.access,
     required this.onClose,
     required this.onTheme,
     required this.onExport,
     required this.onImport,
+    required this.onReminders,
+    required this.onRequestAccess,
   });
 
   final String dataPath;
   final AppTheme theme;
   final bool busy;
+  final bool remindersEnabled;
+  final ReminderAccess access;
   final VoidCallback onClose;
   final ValueChanged<AppTheme> onTheme;
   final VoidCallback onExport;
   final VoidCallback onImport;
+  final ValueChanged<bool> onReminders;
+  final VoidCallback onRequestAccess;
 
   @override
   Widget build(BuildContext context) {
@@ -344,6 +461,37 @@ class MobileDataSheet extends StatelessWidget {
             ],
           ),
           const Divider(height: 26),
+          Text('到点提醒', style: TypeScale.section),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('每段开始时弹一条通知', style: TypeScale.body),
+                    Text(
+                      remindersEnabled ? '按接下来 7 天的计划排程' : '关掉后不会推送任何通知',
+                      style: TypeScale.labelSmall,
+                    ),
+                  ],
+                ),
+              ),
+              Switch(value: remindersEnabled, onChanged: onReminders),
+            ],
+          ),
+          if (remindersEnabled) ...[
+            const SizedBox(height: 6),
+            _AccessLine(access: access, onRequest: onRequestAccess),
+            const SizedBox(height: 6),
+            Text(
+              'OPPO / 小米 / vivo 等系统默认会限制后台，'
+              '请在「设置 → 应用 → 我的时间」里允许自启动、后台运行与通知；'
+              '否则界面里开着开关也可能收不到。',
+              style: TypeScale.labelSmall,
+            ),
+          ],
+          const Divider(height: 26),
           Text('关于云同步', style: TypeScale.section),
           const SizedBox(height: 6),
           Text(
@@ -354,6 +502,58 @@ class MobileDataSheet extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 权限状态提示。两项系统权限各自独立，缺哪个就单独说哪个，不要笼统
+/// 说「权限不足」—— 用户去设置里根本不知道该开哪一项。
+class _AccessLine extends StatelessWidget {
+  const _AccessLine({required this.access, required this.onRequest});
+
+  final ReminderAccess access;
+  final VoidCallback onRequest;
+
+  @override
+  Widget build(BuildContext context) {
+    if (access.ready) {
+      return Row(
+        children: [
+          Icon(Icons.check_circle_outline, size: 15, color: Palette.study),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text('通知与精确闹钟都已放行', style: TypeScale.labelSmall),
+          ),
+        ],
+      );
+    }
+    final missing = [
+      if (!access.notifications) '通知',
+      if (!access.exact) '精确闹钟',
+    ].join('、');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.error_outline, size: 15, color: Palette.exercise),
+            const SizedBox(width: 5),
+            Expanded(
+              child: Text(
+                '系统还没允许$missing，提醒可能不响或迟到几分钟',
+                style: TypeScale.labelSmall,
+              ),
+            ),
+          ],
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: onRequest,
+            child: const Text('去授权'),
+          ),
+        ),
+      ],
     );
   }
 }
