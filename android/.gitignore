@@ -1,0 +1,13 @@
+# 保留 gradlew / gradle-wrapper.jar 入库：clone 后无需 Android Studio
+# 也能直接 `flutter build apk`。只忽略本机生成的缓存与密钥。
+/.gradle
+/captures/
+/local.properties
+GeneratedPluginRegistrant.java
+.cxx/
+
+# Remember to never publicly share your keystore.
+# See https://flutter.dev/to/reference-keystore
+key.properties
+**/*.keystore
+**/*.jks

@@ -11,7 +11,10 @@ import 'package:window_manager/window_manager.dart';
 
 import '../data/app_data.dart';
 import '../data/app_repository.dart';
+import '../data/plan_store.dart';
+import '../data/transfer.dart';
 import '../design/tokens.dart';
+import '../platform/file_transfer.dart';
 import '../domain/actual_records.dart';
 import '../domain/category.dart';
 import '../domain/plan.dart';
@@ -155,6 +158,9 @@ class _RoutineAppState extends State<RoutineApp>
               label: '开机自启',
               checked: _openAtLogin,
             ),
+            MenuItem.separator(),
+            MenuItem(key: 'export', label: '导出计划表备份'),
+            MenuItem(key: 'import', label: '导入计划表备份（会覆盖）'),
             MenuItem.separator(),
             MenuItem(key: 'quit', label: '退出'),
           ],
@@ -542,8 +548,69 @@ class _RoutineAppState extends State<RoutineApp>
         await _toggleFloat();
       case 'login':
         await _toggleAutostart();
+      case 'export':
+        await _exportBackup();
+      case 'import':
+        await _importBackup();
       case 'quit':
         await _quitApp();
+    }
+  }
+
+  /// 托盘里的「导出 / 导入备份」。两端共用 PlanBackup 信封格式。
+  /// 导入会整体覆盖本机数据，PlanStore.replace 会先留 .pre-import.bak。
+  PlanStore get _store => LocalFilePlanStore(repository: widget.repository);
+
+  void _notify(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: TypeScale.label.copyWith(color: Palette.text),
+        ),
+        behavior: SnackBarBehavior.floating,
+        width: 360,
+      ),
+    );
+  }
+
+  Future<void> _exportBackup() async {
+    final data = _data;
+    if (data == null) return;
+    try {
+      final text = PlanBackup.encode(
+        data,
+        sourcePlatform: Platform.isAndroid ? 'android' : 'windows',
+        appVersion: '0.10.0',
+      );
+      final saved = await PlanFileTransfer.saveText(
+        suggestedName: PlanBackup.fileName(_now),
+        content: text,
+      );
+      _notify(saved == null ? '已取消导出' : '备份已导出');
+    } on Object catch (e) {
+      _notify('导出失败：$e');
+    }
+  }
+
+  Future<void> _importBackup() async {
+    try {
+      final text = await PlanFileTransfer.readText();
+      if (text == null) return;
+      final parsed = PlanBackup.decode(text);
+      await _store.replace(parsed.data);
+      if (!mounted) return;
+      setState(() {
+        _data = parsed.data;
+        _error = null;
+      });
+      _ensureTodaySnapshot();
+      _notify('已导入 ${parsed.origin}；原文件已备份为 .pre-import.bak');
+    } on PlanBackupException catch (e) {
+      _notify(e.message);
+    } on Object catch (e) {
+      _notify('导入失败：$e');
     }
   }
 

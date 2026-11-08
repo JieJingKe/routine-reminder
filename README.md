@@ -1,15 +1,19 @@
 # 我的时间 · 作息提醒器
 
-> 常驻托盘的 Windows 桌面应用：把计划摊进一天的 24 小时，随时告诉你**现在该做什么、接下来做什么**。
+> 把计划摊进一天的 24 小时，随时告诉你**现在该做什么、接下来做什么**。
 > 少花时间纠结「下一步该干什么」，把注意力留在手上这件事，而不是被短视频带走。
+>
+> 现有 **Windows 桌面版**（常驻托盘 + 悬浮环）和 **Android 手机版**（竖屏单页）两端，
+> 共用同一份数据格式、日期判定与配色。
 
 ![主界面 · 深色主题](docs/screenshots/01-dashboard-dark.png)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows-0078D4.svg)]()
+[![Windows](https://img.shields.io/badge/Windows-0078D4.svg)]()
+[![Android](https://img.shields.io/badge/Android-3DDC84.svg)]()
 [![Flutter](https://img.shields.io/badge/Flutter-3.13%2B-02569B.svg)]()
 
-当前版本 **v0.9.2+1**。界面为简体中文，支持**浅色 / 深色双主题**。
+当前版本 **v0.10.0+1**（Android 首版）。界面为简体中文，支持**浅色 / 深色双主题**。
 
 ---
 
@@ -65,7 +69,8 @@
 
 </details>
 
-> 以上截图全部由 Flutter 引擎在测试中真实渲染（`test/goldens/`），不是设计稿或示意图。
+> 以上截图是 **Windows 桌面版**，全部由 Flutter 引擎在测试中真实渲染
+> （`test/goldens/`），不是设计稿或示意图。Android 版是手机竖屏单列布局，界面结构不同。
 
 ---
 
@@ -82,8 +87,9 @@
 | **多计划表** | 新建 / 复制 / 重命名 / 删除 / 排序；表内任务与重复规则独立 |
 | **重复规则** | 每天、按星期、按周期（含大小周锚点）、仅指定日期；特殊日期优先于常规重复 |
 | **单日改判** | 顶栏一键切换今天用哪张表；月历点某天可单独指派，压过所有自动规则 |
-| **桌面常驻** | 系统托盘、168px 桌面悬浮环、开机自启（不弹主窗口）、浅/深主题记忆 |
-| **数据** | 本地 JSON 原子写入；v1 → v2 自动迁移并留 `.bak` |
+| **桌面常驻**（仅 Windows） | 系统托盘、168px 桌面悬浮环、开机自启（不弹主窗口）、浅/深主题记忆 |
+| **Android 手机版** | 竖屏单列看板 / 编辑 / 汇总、计划表切换与未来 7 天指派、系统分享式导入导出 |
+| **数据** | 本地 JSON 原子写入；v1 → v2 自动迁移并留 `.bak`；两端可互导备份 |
 
 **同一天只用一张表**：所有界面（看板 / 编辑 / 汇总 / 悬浮窗）都走同一个日期判定入口，
 所以「过了大半天才临时切换」不会让看板和汇总各算一套。
@@ -98,8 +104,8 @@
 
 | 文件 | 怎么用 | 适合 |
 | --- | --- | --- |
-| `routine_reminder-v0.9.2-windows-single.exe` | 下载后双击，就一个文件 | 发给别人、不想解压 |
-| `routine_reminder-v0.9.2-windows.zip` | 解压后双击 `routine_reminder.exe` | 想看清文件清单、放在固定位置 |
+| `routine_reminder-v0.10.0-windows-single.exe` | 下载后双击，就一个文件 | 发给别人、不想解压 |
+| `routine_reminder-v0.10.0-windows.zip` | 解压后双击 `routine_reminder.exe` | 想看清文件清单、放在固定位置 |
 
 **单文件版**第一次双击会把运行包释放到
 `%LOCALAPPDATA%\Programs\routine-reminder\`，之后始终从该目录启动主程序。
@@ -114,7 +120,32 @@
 > 首次运行若被 SmartScreen 拦下，选「更多信息 → 仍要运行」。
 > 关闭主窗口不会退出程序，需要从托盘图标的菜单里选「退出」。
 
-### 方式二：从源码构建
+### 方式二：Android 版
+
+[Releases](https://github.com/JieJingKe/routine-reminder/releases) 提供
+`routine_reminder-v0.10.0-android.apk`，下载后直接安装（Android 7.0 / API 24 起）。
+程序用调试证书签名，首次安装系统可能提示「未知来源」，允许一次即可。
+
+- **不申请任何敏感权限**：备份导出走系统文件选择器（SAF），不需要存储权限。
+- **数据独立**：首次启动生成两张示例表，存在应用私有目录，卸载即清除；不会自动同步电脑上的表。
+- **两端互传**：Windows 托盘菜单「导出计划表备份」/「导入计划表备份（会覆盖）」，
+  Android 顶部「数据」按钮里是同样的两项。导入前自动留 `data.json.pre-import.bak`。
+- **这一版没有的**：系统托盘、168px 桌面悬浮环、开机自启、hover 反馈、键盘快捷键、
+  到点通知/精确闹钟。前者是 Windows 桌面能力，后者见下面的 roadmap。
+
+从源码构建：
+
+```bash
+flutter pub get
+flutter build apk --release --no-tree-shake-icons
+```
+
+产物在 `build/app/outputs/flutter-apk/app-release.apk`（通用包，含 arm64-v8a /
+armeabi-v7a / x86_64）。需要 Android SDK Platform **35 与 36**（主工程 compileSdk 36，
+`jni_flutter` 插件仍要 35）、build-tools 36、JDK 17、Flutter 3.13+。
+`--no-tree-shake-icons` 同样必须，否则设置齿轮等图标会空白。
+
+### 方式三：Windows 从源码构建
 
 前置条件：
 
@@ -161,13 +192,26 @@ export NO_PROXY=localhost,127.0.0.1
 
 ## 数据存在哪
 
-```
-%APPDATA%\com.jason\routine_reminder\data.json
-```
+| 平台 | 路径 |
+| --- | --- |
+| Windows | `%APPDATA%\com.jason\routine_reminder\data.json` |
+| Android | 应用私有目录 `.../files/data.json`（`path_provider` 的 `getApplicationSupportDirectory()`） |
 
-首次启动写入内置的两张示例表。写盘是「先写 `.tmp` 再改名」的原子操作，
-避免断电留下半截 JSON。结构版本为 **v2**；读到旧版 v1 会自动迁移，
+两端格式完全一致：首次启动写入内置的两张示例表；写盘是「先写 `.tmp` 再改名」
+的原子操作，避免断电留下半截 JSON；结构版本为 **v2**，读到旧版 v1 会自动迁移，
 迁移前先备份成 `data.json.bak`。
+
+### 备份与下一步：云同步
+
+现在两端各自一份数据，靠文件搬运。导出的 `.json` 是一层薄信封：
+`format` / `formatVersion` / `exportedAt` / `sourcePlatform` / `deviceId` / `updatedAt` / `data`，
+`data` 里就是完整的 `AppData.toJson()`；导入也接受直接拷出来的裸 `data.json`。
+信封里预留的设备标识与更新时间，是为了将来做冲突判定。
+
+数据层已经抽出 `PlanStore` 接口（`load` / `save` / `replace`），当前只有
+`LocalFilePlanStore` 一个实现，界面不关心数据落在本地还是网络。**自动同步还需要**
+一个两端都能访问的服务端（账号体系、备份读写接口、冲突策略 LWW 或手动合并），
+这属于下一轮工程，本轮没有实现，也没有任何联网行为。
 
 汇总里的「实际」一列目前仍是**计划值 + 空覆盖**，尚未做真实行为采集，
 所以请不要把它当成已完成的事实记录。这不动摇主用途：它首先是执行导航，
@@ -182,7 +226,8 @@ lib/
 ├── domain/     纯 Dart，不 import Flutter：分类、作息块、时间计算、
 │               重复规则 / 计划表、统计、编辑逻辑（可单独 dart run）
 ├── data/       AppData 根对象、示例数据、汇总口径与 Markdown 导出、
-│               AppRepository 唯一读写入口（含 v1→v2 迁移）
+│               AppRepository 唯一读写入口（含 v1→v2 迁移）、
+│               PlanStore 存储接口（云同步预留）、PlanBackup 备份编解码
 ├── design/     tokens.dart：颜色 / 字号 / 圆角 / 间距唯一来源，浅深主题切换
 ├── ui/
 │   ├── ring/   双环几何与 CustomPainter
@@ -191,14 +236,22 @@ lib/
 │   ├── l3/     汇总：今天 / 本周 / 本月
 │   ├── shell/  顶栏、设置、计划表选择 / 管理 / 编辑器、浮层
 │   └── widgets/ 卡片、分段控件、日历格、hover 判定等
-├── float/      悬浮窗独立进程（--float），只接收主进程推送的状态
-├── app/        窗口、托盘、开机自启、主题、视图切换、时间轮询
-└── main.dart   入口与窗口初始尺寸
+├── float/      悬浮窗独立进程（--float），只接收主进程推送的状态（仅 Windows）
+├── app/        窗口、托盘、开机自启、主题、视图切换、时间轮询（仅 Windows）
+├── mobile/     Android 外壳：竖屏看板 / 编辑 / 汇总、计划表浮层、数据页
+├── platform/   PlanFileTransfer：跨端文件选择 / 保存（file_picker）
+└── main.dart   入口；按平台分流到桌面树或移动端树
 
-test/           单元测试 + 19 张 golden 基线截图
-tool/           领域逻辑探针、v1→v2 迁移演练
+test/           单元测试 + 19 张 golden 基线截图（桌面 1060×540 / 720）
+tool/           领域逻辑探针、v1→v2 迁移演练、Windows 单 exe 打包
 windows/        Flutter Windows runner（CMake 外壳）
+android/        Flutter Android runner（Gradle Kotlin DSL、启动图标、Manifest）
 ```
+
+**两端共用**：`domain/` + `data/`（纯 Dart）、`design/tokens.dart`、圆环绘制、
+`data.json` 格式。**两端分开**：桌面外壳（`app/` + `float/` + `ui/shell/` 的窗口部分）
+与移动端外壳（`mobile/`）——托盘、悬浮窗第二进程、注册表自启在 Android 上不存在，
+所以是两棵树而不是给桌面壳打补丁。
 
 设计上的两条硬规矩：
 
@@ -215,7 +268,7 @@ windows/        Flutter Windows runner（CMake 外壳）
 dart format lib test
 dart analyze lib test                  # 期望 No issues found
 dart run tool/check_domain.dart        # 领域逻辑探针，看得见每一步的值
-flutter test                           # 171 个用例 + 19 张 golden 比对
+flutter test                           # 176 个用例 + 19 张 golden 比对
 flutter test --update-goldens          # 改了配色 / 布局后重拍基线
 ```
 
@@ -227,12 +280,15 @@ L2 / L3 用 `1060×720`。**L2 第一屏高度写死为 `Spacing.dashboardBodyHe
 
 ## 已知限制 /  roadmap
 
-- **仅 Windows**。没有 macOS / Linux / 移动端版本，也没有云同步。
+- **两端范围**：Windows 10/11 64 位 + Android 7.0+（手机竖屏）。没有 macOS / Linux / iOS，也没有平板横屏适配。
+- **Android 是最小可用版**：没有通知 / 精确闹钟 / 前台服务 / 开机自启；计划表只能切换、改判、编辑作息，还不能新建或删除（桌面版可）。
+- **没有云同步**：两端各自一份数据，靠导入导出搬运；服务端与账号是下一轮工程，`PlanStore` 接口已留。
 - 「实际」行为尚未采集；半天分段（上午 A 表、下午 B 表）未实现，当前一天只认一张表。
 - 计划表按序号优先级匹配，同一天多张表都命中时取第一张，不做合并。
-- 悬浮窗是独立进程，通过本机连接接收状态；只允许一个主实例。
+- 悬浮窗是独立进程，通过本机连接接收状态；只允许一个主实例（仅 Windows）。
+- 19 张 golden 都是桌面横屏基线；Android 端暂无 UI 截图测试。
 
-欢迎提 Issue 或 PR，尤其是跨平台适配、数据导入导出和统计口径方面的想法。
+欢迎提 Issue 或 PR，尤其是通知提醒、云同步、平板适配和统计口径方面的想法。
 
 ---
 
@@ -246,7 +302,10 @@ L2 / L3 用 `1060×720`。**L2 第一屏高度写死为 `Spacing.dashboardBodyHe
 - 环上色块默认全是满色，只有编辑态明确指向某块时才把其余块压暗——
   整体压到 0.75 会让整套配色发灰。
 - 可点控件统一「**停留 110ms 才算 hover**」，命中区域严格等于按钮边界，
-  避免鼠标横扫顶栏时留下一串深色残影。
+  避免鼠标横扫顶栏时留下一串深色残影（Android 触摸端不套这套规则）。
+- `file_picker` 停在 **10.x**：13.x 会通过 `windows_file_picker` 把 `win32` 拉到 6.x，
+  而悬浮窗点击穿透用的是 win32 5.x 的 `GetWindowLongPtr`。两端共用一个仓库，
+  依赖解析必须同时满足两边，不能只顾 Android。
 
 ---
 

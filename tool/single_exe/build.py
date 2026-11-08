@@ -5,8 +5,11 @@
         --pyinstaller-home <pyinstaller 安装目录>
 
 产物：
-    <out>/routine_reminder-v0.9.2-windows.zip       整目录绿色包（含 VC++ 运行库）
-    <out>/routine_reminder-v0.9.2-windows-single.exe 单文件启动器
+    <out>/routine_reminder-v<版本>-windows.zip       整目录绿色包（含 VC++ 运行库）
+    <out>/routine_reminder-v<版本>-windows-single.exe 单文件启动器
+
+版本号唯一来源是 `pubspec.yaml` 的 `version:`（`0.10.0+1` → `v0.10.0`），
+exe 的版本资源由 `version_info.txt` 模板当场渲染，不另存一份数字。
 
 注意：所有中间文件都放在 %TEMP% 的纯 ASCII 路径下。Flutter / PyInstaller
 在中文路径下会出现读不到产物的怪问题，不要直接拿仓库目录当工作区。
@@ -22,12 +25,39 @@ import sys
 import tempfile
 import zipfile
 
-VERSION = "0.9.2"
+VERSION = "0.0.0"
+BUILD = 0
 FOLDER = "routine_reminder-v%s" % VERSION
 ZIP_NAME = FOLDER + "-windows.zip"
 EXE_STEM = FOLDER + "-windows-single"
 VC_DLLS = ("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll")
 EXTRA_DOCS = ("README.md", "LICENSE")
+
+
+def read_version(repo: str) -> tuple[str, int]:
+    """从 pubspec.yaml 读版本，返回 (x.y.z, build)。"""
+    path = os.path.join(repo, "pubspec.yaml")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("version:"):
+                    raw = line.split(":", 1)[1].strip()
+                    base, _, build = raw.partition("+")
+                    number = int(build) if build.strip().isdigit() else 0
+                    if not base.strip():
+                        break
+                    return base.strip(), number
+    except OSError as exc:
+        raise SystemExit("读不到 %s：%s" % (path, exc))
+    raise SystemExit("pubspec.yaml 缺少 version 字段：%s" % path)
+
+
+def apply_version(repo: str) -> None:
+    global VERSION, BUILD, FOLDER, ZIP_NAME, EXE_STEM
+    VERSION, BUILD = read_version(repo)
+    FOLDER = "routine_reminder-v%s" % VERSION
+    ZIP_NAME = FOLDER + "-windows.zip"
+    EXE_STEM = FOLDER + "-windows-single"
 
 
 def prepare_bundle(work: str, release: str, repo: str) -> str:
@@ -72,12 +102,27 @@ def make_zip(bundle: str, out: str) -> str:
     return path
 
 
+def render_version_info(src: str, template: str) -> str:
+    """把版本号渲染进 PyInstaller 的版本资源模板。"""
+    with open(template, encoding="utf-8") as handle:
+        text = handle.read()
+    parts = [int(p) if p.isdigit() else 0 for p in VERSION.split(".")]
+    parts = (parts + [0, 0, 0])[:3]
+    text = text.replace("__VERSION_QUAD__", "(%d, %d, %d, %d)" % (*parts, BUILD))
+    text = text.replace("__VERSION_FULL__", "%d.%d.%d.%d" % (*parts, BUILD))
+    text = text.replace("__EXE_NAME__", EXE_STEM + ".exe")
+    target = os.path.join(src, "version_info.txt")
+    with open(target, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    return target
+
+
 def make_exe(work: str, bundle: str, repo: str, out: str, pyinstaller_home: str) -> str:
     src = os.path.join(work, "src")
     os.makedirs(src, exist_ok=True)
     here = os.path.dirname(os.path.abspath(__file__))
-    for name in ("launcher.py", "version_info.txt"):
-        shutil.copy2(os.path.join(here, name), os.path.join(src, name))
+    shutil.copy2(os.path.join(here, "launcher.py"), os.path.join(src, "launcher.py"))
+    version_file = render_version_info(src, os.path.join(here, "version_info.txt"))
     icon = os.path.join(repo, "windows", "runner", "resources", "app_icon.ico")
     if not os.path.isfile(icon):
         raise SystemExit("缺少应用图标：%s" % icon)
@@ -99,7 +144,7 @@ def make_exe(work: str, bundle: str, repo: str, out: str, pyinstaller_home: str)
         "--onefile", "--noconsole", "--clean", "-y", "--log-level", "WARN",
         "--name", EXE_STEM,
         "--icon", os.path.join(src, "app_icon.ico"),
-        "--version-file", os.path.join(src, "version_info.txt"),
+        "--version-file", version_file,
         "--add-data", archive + os.pathsep + ".",
         "--distpath", os.path.join(work, "dist"),
         "--workpath", os.path.join(work, "build"),
@@ -132,6 +177,8 @@ def main() -> int:
     repo = os.path.abspath(args.repo)
     out = os.path.abspath(args.out)
     os.makedirs(out, exist_ok=True)
+    apply_version(repo)
+    print("[build] version: v%s (%s)" % (VERSION, FOLDER), flush=True)
 
     work = tempfile.mkdtemp(prefix="rr_dist_")
     try:

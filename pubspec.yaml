@@ -8,7 +8,7 @@ publish_to: 'none'
 # → v0.9.1 浮层打磨（按钮 hover 统一变灰 / 浮层压暗遮罩）
 # → v0.9.2 停留 hover（快速经过不触发 / 命中区域严格等于按钮边界）。
 # 未验收前一律 v0.x；+N 是构建号，同一次交付重生构建时递增。
-version: 0.9.2+1
+version: 0.10.0+1
 
 environment:
   sdk: ^3.13.7
@@ -28,6 +28,10 @@ dependencies:
   window_manager: ^0.5.2
   # 本地 JSON 数据文件放在应用支持目录
   path_provider: ^2.1.4
+  # 计划表备份的导入 / 导出：Windows 原生对话框、Android SAF，两端共用
+  # 停在 10.x：13.x 会通过 windows_file_picker 把 win32 拉到 6.x，
+  # 而悬浮窗的点击穿透用的是 win32 5.x API，不能跟着升。
+  file_picker: ^10.3.2
   # 悬浮窗点击穿透：穿透状态下收不到鼠标事件，只能轮询全局光标位置
   # 来判断"鼠标是否回到圆上"，再关掉穿透恢复交互。
   screen_retriever: ^0.2.2
