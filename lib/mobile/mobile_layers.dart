@@ -105,7 +105,22 @@ class MobilePlanSheet extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('今天：$active.label', style: TypeScale.bodyMuted),
+          Text.rich(
+            TextSpan(
+              style: TypeScale.bodyMuted,
+              children: [
+                const TextSpan(text: '今天：'),
+                TextSpan(
+                  text: active.planName,
+                  style: TextStyle(
+                    color: Palette.text,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                TextSpan(text: '（${active.source}）'),
+              ],
+            ),
+          ),
           const SizedBox(height: 12),
           for (final plan in data.plans)
             _PlanRow(

@@ -13,7 +13,7 @@
 [![Android](https://img.shields.io/badge/Android-3DDC84.svg)]()
 [![Flutter](https://img.shields.io/badge/Flutter-3.13%2B-02569B.svg)]()
 
-当前版本 **v0.10.0+1**（Android 首版）。界面为简体中文，支持**浅色 / 深色双主题**。
+当前版本 **v0.10.1+2**（Android 首版 + 计划表浮层文案修复）。界面为简体中文，支持**浅色 / 深色双主题**。
 
 ---
 
@@ -104,8 +104,8 @@
 
 | 文件 | 怎么用 | 适合 |
 | --- | --- | --- |
-| `routine_reminder-v0.10.0-windows-single.exe` | 下载后双击，就一个文件 | 发给别人、不想解压 |
-| `routine_reminder-v0.10.0-windows.zip` | 解压后双击 `routine_reminder.exe` | 想看清文件清单、放在固定位置 |
+| `routine_reminder-v0.10.1-windows-single.exe` | 下载后双击，就一个文件 | 发给别人、不想解压 |
+| `routine_reminder-v0.10.1-windows.zip` | 解压后双击 `routine_reminder.exe` | 想看清文件清单、放在固定位置 |
 
 **单文件版**第一次双击会把运行包释放到
 `%LOCALAPPDATA%\Programs\routine-reminder\`，之后始终从该目录启动主程序。
@@ -123,7 +123,7 @@
 ### 方式二：Android 版
 
 [Releases](https://github.com/JieJingKe/routine-reminder/releases) 提供
-`routine_reminder-v0.10.0-android.apk`，下载后直接安装（Android 7.0 / API 24 起）。
+`routine_reminder-v0.10.1-android.apk`，下载后直接安装（Android 7.0 / API 24 起）。
 程序用调试证书签名，首次安装系统可能提示「未知来源」，允许一次即可。
 
 - **不申请任何敏感权限**：备份导出走系统文件选择器（SAF），不需要存储权限。

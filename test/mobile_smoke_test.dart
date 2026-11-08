@@ -62,6 +62,11 @@ void main() {
     expect(find.text('今天恢复按规则自动'), findsOneWidget);
     expect(find.text('接下来 7 天'), findsOneWidget);
 
+    // 回归：这一行曾经写成 '今天：$active.label'，漏了花括号，结果把
+    // AppData.forDate 的记录直接 toString 铺满整个浮层。这里锁死「人话」。
+    expect(find.textContaining('(blocks:', findRichText: true), findsNothing);
+    expect(find.textContaining('今天：', findRichText: true), findsOneWidget);
+
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
 
